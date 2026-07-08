@@ -45,9 +45,8 @@ func (f *decompressor) $FUNCNAME$() {
 	)
 	fr := f.r.($TYPE$)
 
-	// Optimization. Compiler isn't smart enough to keep f.b,f.nb in registers,
-	// but is smart enough to keep local variables in registers, so use nb and b,
-	// inline call to moreBits and reassign b,nb back to f on return.
+	// Keep the bit buffer and dictionary in locals for the hot loop. The
+	// decoder writes b and nb back to f before each return.
 	fnb, fb, dict := f.nb, f.b, &f.dict
 
 	switch f.stepState {
@@ -63,10 +62,7 @@ readLiteral:
 		var v int
 		{
 			// Inlined v, err := f.huffSym(f.hl)
-			// Since a huffmanDecoder can be empty or be composed of a degenerate tree
-			// with single element, huffSym must error on these two edge cases. In both
-			// cases, the chunks slice will be 0 for the invalid sequence, leading it
-			// satisfy the n == 0 check below.
+			// A chunk count of zero marks an invalid Huffman sequence.
 			n := uint(f.hl.maxRead)
 			for {
 				for fnb < n {
@@ -172,14 +168,8 @@ readLiteral:
 			fb >>= 5
 			fnb -= 5
 		} else {
-			// Since a huffmanDecoder can be empty or be composed of a degenerate tree
-			// with single element, huffSym must error on these two edge cases. In both
-			// cases, the chunks slice will be 0 for the invalid sequence, leading it
-			// satisfy the n == 0 check below.
+			// A chunk count of zero marks an invalid Huffman sequence.
 			n := uint(f.hd.maxRead)
-			// Optimization. Compiler isn't smart enough to keep f.b,f.nb in registers,
-			// but is smart enough to keep local variables in registers, so use nb and b,
-			// inline call to moreBits and reassign b,nb back to f on return.
 			for {
 				for fnb < n {
 					c, err := fr.ReadByte()
@@ -291,11 +281,18 @@ copyHistory:
 		s = strings.Replace(s, "$TYPE$", t, -1)
 		f.WriteString(s)
 	}
+	f.WriteString("// huffmanBlockDecoder routes `*bytes.Reader` blocks to `huffmanBytesReaderFast`.\n")
+	f.WriteString("// The generated `huffmanBytesReader` remains unused by this dispatch because\n")
+	f.WriteString("// the fast path reads the backing slice and commits the reader index on exit.\n")
 	f.WriteString("func (f *decompressor) huffmanBlockDecoder() {\n")
 	f.WriteString("\tswitch f.r.(type) {\n")
 	for i, t := range types {
 		f.WriteString("\t\tcase " + t + ":\n")
-		f.WriteString("\t\t\tf.huffman" + names[i] + "()\n")
+		name := "huffman" + names[i]
+		if t == "*bytes.Reader" {
+			name = "huffmanBytesReaderFast"
+		}
+		f.WriteString("\t\t\tf." + name + "()\n")
 	}
 	f.WriteString("\t\tdefault:\n")
 	f.WriteString("\t\t\tf.huffmanGenericReader()\n")
