@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	maxCodeLen     = 16 // max length of Huffman code
-	maxCodeLenMask = 15 // mask for max length of Huffman code
+	maxCodeLen     = 16 // one past the maximum Huffman code length
+	maxCodeLenMask = 15 // mask for 4-bit Huffman code lengths
 	// The next three numbers come from the RFC section 3.2.7, with the
 	// additional proviso in section 3.2.5 which implies that distance codes
 	// 30 and 31 should never occur in compressed data.
@@ -151,7 +151,11 @@ func (h *huffmanDecoder) init(lengths []int) bool {
 	// codes for the HLIT and HDIST trees. Similarly, an empty HLIT tree is
 	// guaranteed to fail later since the compressed data section must be
 	// composed of at least one symbol (the end-of-block marker).
+	chunks := h.chunks[:]
 	if max == 0 {
+		for i := range chunks {
+			chunks[i] = 0
+		}
 		return true
 	}
 
@@ -177,7 +181,6 @@ func (h *huffmanDecoder) init(lengths []int) bool {
 
 	h.maxRead = min
 
-	chunks := h.chunks[:]
 	for i := range chunks {
 		chunks[i] = 0
 	}
@@ -335,7 +338,7 @@ type decompressor struct {
 	// Temporary buffer (avoids repeated allocation).
 	buf [4]byte
 
-	// Input bits, in top of b.
+	// Input bits, stored in the low nb bits of b.
 	b uint32
 
 	nb    uint
@@ -640,8 +643,8 @@ func (f *decompressor) dataBlock() {
 	f.copyData()
 }
 
-// copyData copies f.copyLen bytes from the underlying reader into f.hist.
-// It pauses for reads when f.hist is full.
+// copyData copies f.copyLen bytes from the underlying reader into the
+// dictionary write buffer. It pauses when the history window is full.
 func (f *decompressor) copyData() {
 	buf := f.dict.writeSlice()
 	if len(buf) > f.copyLen {
@@ -721,14 +724,10 @@ func (f *decompressor) moreBits() error {
 
 // Read the next Huffman-encoded symbol from f according to h.
 func (f *decompressor) huffSym(h *huffmanDecoder) (int, error) {
-	// Since a huffmanDecoder can be empty or be composed of a degenerate tree
-	// with single element, huffSym must error on these two edge cases. In both
-	// cases, the chunks slice will be 0 for the invalid sequence, leading it
-	// satisfy the n == 0 check below.
+	// A chunk count of zero marks an invalid Huffman sequence.
 	n := uint(h.maxRead)
-	// Optimization. Compiler isn't smart enough to keep f.b,f.nb in registers,
-	// but is smart enough to keep local variables in registers, so use nb and b,
-	// inline call to moreBits and reassign b,nb back to f on return.
+	// Keep the bit buffer in locals for the hot loop. The decoder writes b and
+	// nb back to f before each return.
 	nb, b := f.nb, f.b
 	for {
 		for nb < n {
@@ -808,8 +807,8 @@ func (f *decompressor) Reset(r io.Reader, dict []byte) error {
 
 type ReaderOpt func(*decompressor)
 
-// WithPartialBlock tells decompressor to return after each block,
-// so it can read data written with partial flush
+// WithPartialBlock flushes available output at block boundaries for streams
+// written with partial flush markers.
 func WithPartialBlock() ReaderOpt {
 	return func(f *decompressor) {
 		f.flushMode = partialFlush
@@ -859,7 +858,7 @@ func NewReader(r io.Reader) io.ReadCloser {
 // which has already been read. NewReaderDict is typically used
 // to read data compressed by NewWriterDict.
 //
-// The ReadCloser returned by NewReader also implements Resetter.
+// The ReadCloser returned by NewReaderDict also implements Resetter.
 func NewReaderDict(r io.Reader, dict []byte) io.ReadCloser {
 	return NewReaderOpts(r, WithDict(dict))
 }
