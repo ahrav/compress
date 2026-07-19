@@ -1,3 +1,5 @@
+//go:build !nounsafe && !purego && !appengine
+
 package flate
 
 import (
@@ -15,8 +17,12 @@ type bytesReaderState struct {
 	prevRune int
 }
 
+// bytesReaderStateOf reinterprets r's memory as a bytesReaderState. The
+// returned pointer aliases the same allocation as r, so it keeps that
+// allocation reachable on its own; no runtime.KeepAlive is required at call
+// sites.
 func bytesReaderStateOf(r *bytes.Reader) *bytesReaderState {
-	// `TestBytesReaderStateOf` guards size, alignment, direct slice access,
+	// `TestBytesReaderStateOf` guards size, field layout, direct slice access,
 	// byte-index mutation, and `prevRune` invalidation after `ReadByte`.
 	return (*bytesReaderState)(unsafe.Pointer(r))
 }

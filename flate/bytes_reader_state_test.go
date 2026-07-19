@@ -1,19 +1,36 @@
+//go:build !nounsafe && !purego && !appengine
+
 package flate
 
 import (
 	"bytes"
+	"reflect"
 	"testing"
 	"unsafe"
 )
 
 func TestBytesReaderStateOf(t *testing.T) {
-	// Guard the unsafe mirror against `bytes.Reader` changes in size, alignment,
-	// backing-slice layout, byte-index layout, or `ReadByte`'s `prevRune` rule.
+	// Guard the unsafe mirror against `bytes.Reader` changes in size, field
+	// layout, backing-slice access, byte-index tracking, or `ReadByte`'s
+	// `prevRune` rule.
 	if got, want := unsafe.Sizeof(bytes.Reader{}), unsafe.Sizeof(bytesReaderState{}); got != want {
 		t.Fatalf("bytes.Reader size = %d, mirror size = %d", got, want)
 	}
-	if got, want := unsafe.Alignof(bytes.Reader{}), unsafe.Alignof(bytesReaderState{}); got != want {
-		t.Fatalf("bytes.Reader align = %d, mirror align = %d", got, want)
+	// Cross-check every field: same count, same type, same offset. This
+	// catches reordering, retyping, or realignment that Sizeof alone misses.
+	rt := reflect.TypeOf(bytes.Reader{})
+	mt := reflect.TypeOf(bytesReaderState{})
+	if rt.NumField() != mt.NumField() {
+		t.Fatalf("bytes.Reader has %d fields, mirror has %d", rt.NumField(), mt.NumField())
+	}
+	for idx := 0; idx < rt.NumField(); idx++ {
+		rf, mf := rt.Field(idx), mt.Field(idx)
+		if rf.Type != mf.Type {
+			t.Fatalf("field %d: bytes.Reader type = %v, mirror type = %v", idx, rf.Type, mf.Type)
+		}
+		if rf.Offset != mf.Offset {
+			t.Fatalf("field %d: bytes.Reader offset = %d, mirror offset = %d", idx, rf.Offset, mf.Offset)
+		}
 	}
 
 	r := bytes.NewReader([]byte("abc"))
@@ -50,7 +67,7 @@ func TestBytesReaderStateOf(t *testing.T) {
 	if state.i != 3 {
 		t.Fatalf("state.i after ReadByte = %d, want 3", state.i)
 	}
-	if state.prevRune >= 0 {
-		t.Fatalf("state.prevRune after ReadByte = %d, want < 0", state.prevRune)
+	if state.prevRune != -1 {
+		t.Fatalf("state.prevRune after ReadByte = %d, want -1", state.prevRune)
 	}
 }
