@@ -265,6 +265,14 @@ copyHistory:
 // hl and hd are the Huffman states for the lit/length values
 // and the distance values, respectively. If hd == nil, using the
 // fixed distance encoding associated with fixed Huffman blocks.
+//
+// Unreachable: huffmanBlockDecoder routes `*bytes.Reader` to
+// `huffmanBytesReaderFast` and doStep resumes the shared
+// `huffmanBytesReader` step token there as well. Kept generated so the
+// differential test can compare the fast path against it. If this
+// function is ever re-wired into dispatch, its `f.step =
+// huffmanBytesReader` yields stay compatible: the token still implies
+// `f.r` is `*bytes.Reader`.
 func (f *decompressor) huffmanBytesReader() {
 	const (
 		stateInit = iota // Zero value must be stateInit

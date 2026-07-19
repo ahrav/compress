@@ -220,7 +220,13 @@ const slowDoc = `// Decode a single Huffman block from f.
 const fastDoc = "// huffmanBytesReaderFast decodes one Huffman block from `*bytes.Reader` without\n" +
 	"// per-byte `ReadByte` calls. It snapshots the backing slice and byte index,\n" +
 	"// advances a local index while decoding, then writes the index back before\n" +
-	"// return and clears `prevRune` after any byte read.\n"
+	"// return and clears `prevRune` after any byte read.\n" +
+	"//\n" +
+	"// Dispatch contract: `f.step == huffmanBytesReader` implies `f.r` is\n" +
+	"// `*bytes.Reader`; the opening type assertion panics otherwise. The contract\n" +
+	"// holds because every setter of that step token (this function and the\n" +
+	"// generated, unreachable `huffmanBytesReader`) runs only after asserting\n" +
+	"// `f.r.(*bytes.Reader)`.\n"
 
 const slowPreamble = `	fr := f.r.($TYPE$)
 
@@ -442,6 +448,16 @@ import (
 `)
 	for i, t := range types {
 		gen.WriteString(slowDoc)
+		if t == "*bytes.Reader" {
+			gen.WriteString("//\n")
+			gen.WriteString("// Unreachable: huffmanBlockDecoder routes `*bytes.Reader` to\n")
+			gen.WriteString("// `huffmanBytesReaderFast` and doStep resumes the shared\n")
+			gen.WriteString("// `huffmanBytesReader` step token there as well. Kept generated so the\n")
+			gen.WriteString("// differential test can compare the fast path against it. If this\n")
+			gen.WriteString("// function is ever re-wired into dispatch, its `f.step =\n")
+			gen.WriteString("// huffmanBytesReader` yields stay compatible: the token still implies\n")
+			gen.WriteString("// `f.r` is `*bytes.Reader`.\n")
+		}
 		gen.WriteString(render(false, "huffman"+names[i], t))
 		gen.WriteString("\n\n")
 	}

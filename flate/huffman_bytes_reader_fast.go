@@ -13,6 +13,12 @@ import (
 // per-byte `ReadByte` calls. It snapshots the backing slice and byte index,
 // advances a local index while decoding, then writes the index back before
 // return and clears `prevRune` after any byte read.
+//
+// Dispatch contract: `f.step == huffmanBytesReader` implies `f.r` is
+// `*bytes.Reader`; the opening type assertion panics otherwise. The contract
+// holds because every setter of that step token (this function and the
+// generated, unreachable `huffmanBytesReader`) runs only after asserting
+// `f.r.(*bytes.Reader)`.
 func (f *decompressor) huffmanBytesReaderFast() {
 	const (
 		stateInit = iota // Zero value must be stateInit
