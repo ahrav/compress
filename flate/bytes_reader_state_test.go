@@ -13,6 +13,9 @@ func TestBytesReaderStateOf(t *testing.T) {
 	// Guard the unsafe mirror against `bytes.Reader` changes in size, field
 	// layout, backing-slice access, byte-index tracking, or `ReadByte`'s
 	// `prevRune` rule.
+	if !bytesReaderLayoutOK {
+		t.Fatal("bytesReaderLayoutOK = false; runtime layout probe rejected bytes.Reader mirror")
+	}
 	if got, want := unsafe.Sizeof(bytes.Reader{}), unsafe.Sizeof(bytesReaderState{}); got != want {
 		t.Fatalf("bytes.Reader size = %d, mirror size = %d", got, want)
 	}
