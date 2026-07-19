@@ -12,19 +12,19 @@ jobs:
   build:
     strategy:
       matrix:
-        go-version: [1.23.x, 1.24.x, 1.25.x]
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        go-version: [1.24.x, 1.25.x, 1.26.x]
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
     env:
       CGO_ENABLED: 0
     runs-on: ${{ matrix.os }}
     steps:
     - name: Set up Go
-      uses: actions/setup-go@v6.2.0
+      uses: actions/setup-go@v6.5.0
       with:
         go-version: ${{ matrix.go-version }}
 
     - name: Checkout code
-      uses: actions/checkout@v6.0.2
+      uses: actions/checkout@v7.0.0
 
     - name: Vet
       run: go vet ./...
@@ -58,12 +58,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Set up Go
-      uses: actions/setup-go@v6.2.0
+      uses: actions/setup-go@v6.5.0
       with:
-        go-version: 1.25.x
+        go-version: 1.26.x
 
     - name: Checkout code
-      uses: actions/checkout@v6.0.2
+      uses: actions/checkout@v7.0.0
 
     - name: Generate
       working-directory: ${{ matrix.pkg }}/_generate
@@ -80,15 +80,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Set up Go
-      uses: actions/setup-go@v6.2.0
+      uses: actions/setup-go@v6.5.0
       with:
-        go-version: 1.25.x
+        go-version: 1.26.x
 
     - name: Checkout code
-      uses: actions/checkout@v6.0.2
+      uses: actions/checkout@v7.0.0
 
     - name: fmt
       run: diff <(gofmt -d .) <(printf "")
+
+    - name: fix
+      run: diff <(go fix -diff ./...) <(printf "")
 
     - name: Test 386
       run: GOOS=linux GOARCH=386 go test -short ./...
@@ -97,10 +100,10 @@ jobs:
       run: go build github.com/klauspost/compress/s2/cmd/s2c && go build github.com/klauspost/compress/s2/cmd/s2d&&./s2c -verify s2c &&./s2d s2c.s2&&rm ./s2c&&rm s2d&&rm s2c.s2
 
     - name: goreleaser deprecation
-      run: curl -sfL https://git.io/goreleaser | VERSION=v2.3.2 sh -s -- check
+      run: curl -sfL https://goreleaser.com/static/run | VERSION=v2.13.3 bash -s -- check
 
     - name: goreleaser snapshot
-      run: curl -sL https://git.io/goreleaser | VERSION=v2.3.2 sh -s -- --snapshot --clean
+      run: curl -sfL https://goreleaser.com/static/run | VERSION=v2.13.3 bash -s -- --snapshot --clean
 
     - name: Test S2 GOAMD64 v3
       env:
@@ -123,12 +126,12 @@ jobs:
         tags: [ 'nounsafe', '"noasm,nounsafe"' ]
     steps:
       - name: Set up Go
-        uses: actions/setup-go@v6.2.0
+        uses: actions/setup-go@v6.5.0
         with:
-          go-version: 1.25.x
+          go-version: 1.26.x
 
       - name: Checkout code
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@v7.0.0
 
       - name: S2/FuzzDictBlocks/${{ matrix.tags }}
         run: go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzDictBlocks -fuzztime=100000x -test.fuzzminimizetime=10ms ./s2/.
@@ -143,18 +146,19 @@ jobs:
   fuzz-zstd:
     env:
       CGO_ENABLED: 0
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        os: [ ubuntu-latest, ubuntu-24.04-arm ]
         tags: [ 'nounsafe', '"noasm,nounsafe"' ]
     steps:
       - name: Set up Go
-        uses: actions/setup-go@v6.2.0
+        uses: actions/setup-go@v6.5.0
         with:
           go-version: 1.25.x
 
       - name: Checkout code
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@v7.0.0
 
       - name: zstd/FuzzDecodeAll/${{ matrix.tags }}
         run: go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzDecodeAll -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
@@ -180,11 +184,11 @@ jobs:
         tags: [ 'nounsafe', '"noasm,nounsafe"' ]
     steps:
       - name: Set up Go
-        uses: actions/setup-go@v6.2.0
+        uses: actions/setup-go@v6.5.0
         with:
           go-version: 1.25.x
       - name: Checkout code
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@v7.0.0
 
       - name: flate/FuzzEncoding/${{ matrix.tags }}
         run: go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzEncoding -fuzztime=100000x -test.fuzzminimizetime=10ms ./flate/.

@@ -21,8 +21,9 @@ func (f *decompressor) huffmanBytesBuffer() {
 	)
 	fr := f.r.(*bytes.Buffer)
 
-	// Keep the bit buffer and dictionary in locals for the hot loop. The
-	// decoder writes b and nb back to f before each return.
+	// Optimization. Compiler isn't smart enough to keep f.b,f.nb in registers,
+	// but is smart enough to keep local variables in registers, so use nb and b,
+	// inline call to moreBits and reassign b,nb back to f on return.
 	fnb, fb, dict := f.nb, f.b, &f.dict
 
 	switch f.stepState {
@@ -38,7 +39,10 @@ readLiteral:
 		var v int
 		{
 			// Inlined v, err := f.huffSym(f.hl)
-			// A chunk count of zero marks an invalid Huffman sequence.
+			// Since a huffmanDecoder can be empty or be composed of a degenerate tree
+			// with single element, huffSym must error on these two edge cases. In both
+			// cases, the chunks slice will be 0 for the invalid sequence, leading it
+			// satisfy the n == 0 check below.
 			n := uint(f.hl.maxRead)
 			for {
 				for fnb < n {
@@ -144,8 +148,14 @@ readLiteral:
 			fb >>= 5
 			fnb -= 5
 		} else {
-			// A chunk count of zero marks an invalid Huffman sequence.
+			// Since a huffmanDecoder can be empty or be composed of a degenerate tree
+			// with single element, huffSym must error on these two edge cases. In both
+			// cases, the chunks slice will be 0 for the invalid sequence, leading it
+			// satisfy the n == 0 check below.
 			n := uint(f.hd.maxRead)
+			// Optimization. Compiler isn't smart enough to keep f.b,f.nb in registers,
+			// but is smart enough to keep local variables in registers, so use nb and b,
+			// inline call to moreBits and reassign b,nb back to f on return.
 			for {
 				for fnb < n {
 					c, err := fr.ReadByte()
@@ -262,8 +272,9 @@ func (f *decompressor) huffmanBytesReader() {
 	)
 	fr := f.r.(*bytes.Reader)
 
-	// Keep the bit buffer and dictionary in locals for the hot loop. The
-	// decoder writes b and nb back to f before each return.
+	// Optimization. Compiler isn't smart enough to keep f.b,f.nb in registers,
+	// but is smart enough to keep local variables in registers, so use nb and b,
+	// inline call to moreBits and reassign b,nb back to f on return.
 	fnb, fb, dict := f.nb, f.b, &f.dict
 
 	switch f.stepState {
@@ -279,7 +290,10 @@ readLiteral:
 		var v int
 		{
 			// Inlined v, err := f.huffSym(f.hl)
-			// A chunk count of zero marks an invalid Huffman sequence.
+			// Since a huffmanDecoder can be empty or be composed of a degenerate tree
+			// with single element, huffSym must error on these two edge cases. In both
+			// cases, the chunks slice will be 0 for the invalid sequence, leading it
+			// satisfy the n == 0 check below.
 			n := uint(f.hl.maxRead)
 			for {
 				for fnb < n {
@@ -385,8 +399,14 @@ readLiteral:
 			fb >>= 5
 			fnb -= 5
 		} else {
-			// A chunk count of zero marks an invalid Huffman sequence.
+			// Since a huffmanDecoder can be empty or be composed of a degenerate tree
+			// with single element, huffSym must error on these two edge cases. In both
+			// cases, the chunks slice will be 0 for the invalid sequence, leading it
+			// satisfy the n == 0 check below.
 			n := uint(f.hd.maxRead)
+			// Optimization. Compiler isn't smart enough to keep f.b,f.nb in registers,
+			// but is smart enough to keep local variables in registers, so use nb and b,
+			// inline call to moreBits and reassign b,nb back to f on return.
 			for {
 				for fnb < n {
 					c, err := fr.ReadByte()
@@ -503,8 +523,9 @@ func (f *decompressor) huffmanBufioReader() {
 	)
 	fr := f.r.(*bufio.Reader)
 
-	// Keep the bit buffer and dictionary in locals for the hot loop. The
-	// decoder writes b and nb back to f before each return.
+	// Optimization. Compiler isn't smart enough to keep f.b,f.nb in registers,
+	// but is smart enough to keep local variables in registers, so use nb and b,
+	// inline call to moreBits and reassign b,nb back to f on return.
 	fnb, fb, dict := f.nb, f.b, &f.dict
 
 	switch f.stepState {
@@ -520,7 +541,10 @@ readLiteral:
 		var v int
 		{
 			// Inlined v, err := f.huffSym(f.hl)
-			// A chunk count of zero marks an invalid Huffman sequence.
+			// Since a huffmanDecoder can be empty or be composed of a degenerate tree
+			// with single element, huffSym must error on these two edge cases. In both
+			// cases, the chunks slice will be 0 for the invalid sequence, leading it
+			// satisfy the n == 0 check below.
 			n := uint(f.hl.maxRead)
 			for {
 				for fnb < n {
@@ -626,8 +650,14 @@ readLiteral:
 			fb >>= 5
 			fnb -= 5
 		} else {
-			// A chunk count of zero marks an invalid Huffman sequence.
+			// Since a huffmanDecoder can be empty or be composed of a degenerate tree
+			// with single element, huffSym must error on these two edge cases. In both
+			// cases, the chunks slice will be 0 for the invalid sequence, leading it
+			// satisfy the n == 0 check below.
 			n := uint(f.hd.maxRead)
+			// Optimization. Compiler isn't smart enough to keep f.b,f.nb in registers,
+			// but is smart enough to keep local variables in registers, so use nb and b,
+			// inline call to moreBits and reassign b,nb back to f on return.
 			for {
 				for fnb < n {
 					c, err := fr.ReadByte()
@@ -744,8 +774,9 @@ func (f *decompressor) huffmanStringsReader() {
 	)
 	fr := f.r.(*strings.Reader)
 
-	// Keep the bit buffer and dictionary in locals for the hot loop. The
-	// decoder writes b and nb back to f before each return.
+	// Optimization. Compiler isn't smart enough to keep f.b,f.nb in registers,
+	// but is smart enough to keep local variables in registers, so use nb and b,
+	// inline call to moreBits and reassign b,nb back to f on return.
 	fnb, fb, dict := f.nb, f.b, &f.dict
 
 	switch f.stepState {
@@ -761,7 +792,10 @@ readLiteral:
 		var v int
 		{
 			// Inlined v, err := f.huffSym(f.hl)
-			// A chunk count of zero marks an invalid Huffman sequence.
+			// Since a huffmanDecoder can be empty or be composed of a degenerate tree
+			// with single element, huffSym must error on these two edge cases. In both
+			// cases, the chunks slice will be 0 for the invalid sequence, leading it
+			// satisfy the n == 0 check below.
 			n := uint(f.hl.maxRead)
 			for {
 				for fnb < n {
@@ -867,8 +901,14 @@ readLiteral:
 			fb >>= 5
 			fnb -= 5
 		} else {
-			// A chunk count of zero marks an invalid Huffman sequence.
+			// Since a huffmanDecoder can be empty or be composed of a degenerate tree
+			// with single element, huffSym must error on these two edge cases. In both
+			// cases, the chunks slice will be 0 for the invalid sequence, leading it
+			// satisfy the n == 0 check below.
 			n := uint(f.hd.maxRead)
+			// Optimization. Compiler isn't smart enough to keep f.b,f.nb in registers,
+			// but is smart enough to keep local variables in registers, so use nb and b,
+			// inline call to moreBits and reassign b,nb back to f on return.
 			for {
 				for fnb < n {
 					c, err := fr.ReadByte()
@@ -985,8 +1025,9 @@ func (f *decompressor) huffmanGenericReader() {
 	)
 	fr := f.r.(Reader)
 
-	// Keep the bit buffer and dictionary in locals for the hot loop. The
-	// decoder writes b and nb back to f before each return.
+	// Optimization. Compiler isn't smart enough to keep f.b,f.nb in registers,
+	// but is smart enough to keep local variables in registers, so use nb and b,
+	// inline call to moreBits and reassign b,nb back to f on return.
 	fnb, fb, dict := f.nb, f.b, &f.dict
 
 	switch f.stepState {
@@ -1002,7 +1043,10 @@ readLiteral:
 		var v int
 		{
 			// Inlined v, err := f.huffSym(f.hl)
-			// A chunk count of zero marks an invalid Huffman sequence.
+			// Since a huffmanDecoder can be empty or be composed of a degenerate tree
+			// with single element, huffSym must error on these two edge cases. In both
+			// cases, the chunks slice will be 0 for the invalid sequence, leading it
+			// satisfy the n == 0 check below.
 			n := uint(f.hl.maxRead)
 			for {
 				for fnb < n {
@@ -1108,8 +1152,14 @@ readLiteral:
 			fb >>= 5
 			fnb -= 5
 		} else {
-			// A chunk count of zero marks an invalid Huffman sequence.
+			// Since a huffmanDecoder can be empty or be composed of a degenerate tree
+			// with single element, huffSym must error on these two edge cases. In both
+			// cases, the chunks slice will be 0 for the invalid sequence, leading it
+			// satisfy the n == 0 check below.
 			n := uint(f.hd.maxRead)
+			// Optimization. Compiler isn't smart enough to keep f.b,f.nb in registers,
+			// but is smart enough to keep local variables in registers, so use nb and b,
+			// inline call to moreBits and reassign b,nb back to f on return.
 			for {
 				for fnb < n {
 					c, err := fr.ReadByte()
