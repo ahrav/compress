@@ -189,6 +189,9 @@ func TestHuffmanDecoderEmptyTreeClearsChunks(t *testing.T) {
 	if !h.init([]int{1}) {
 		t.Fatal("Failed to initialize non-empty Huffman decoder")
 	}
+	if h.maxRead == 0 {
+		t.Fatal("non-empty Huffman decoder did not set maxRead")
+	}
 	if h.chunks == nil || h.chunks[0] == 0 {
 		t.Fatal("non-empty Huffman decoder did not populate chunks")
 	}
