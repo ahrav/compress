@@ -86,6 +86,11 @@ readLiteral:
 			dict.writeByte(byte(v))
 			if dict.availWrite() == 0 {
 				f.toRead = dict.readFlush()
+				// huffmanBytesReader is the shared resume step for
+				// `*bytes.Reader` blocks; doStep decides which decoder
+				// handles it. Both decoders share the same suspended
+				// state (b/nb/roffset/dict/reader index), so either can
+				// resume this block.
 				f.step = huffmanBytesReader
 				f.stepState = stateInit
 				f.b, f.nb = fb, fnb
@@ -258,6 +263,8 @@ copyHistory:
 
 		if dict.availWrite() == 0 || f.copyLen > 0 {
 			f.toRead = dict.readFlush()
+			// See the readLiteral flush above: shared resume step for
+			// `*bytes.Reader` blocks, routed by doStep.
 			f.step = huffmanBytesReader // We need to continue this work
 			f.stepState = stateDict
 			f.b, f.nb = fb, fnb
@@ -270,7 +277,9 @@ saveReturn:
 	f.roffset = roffset
 	frState.i = frPos
 	if frRead {
-		// Match `bytes.Reader.ReadByte`: consuming any byte invalidates `UnreadRune`.
+		// Match `bytes.Reader.ReadByte`, which invalidates `UnreadRune`
+		// before checking for EOF: any read attempt, successful or not,
+		// clears `prevRune`.
 		frState.prevRune = -1
 	}
 }
