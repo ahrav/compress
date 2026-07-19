@@ -184,6 +184,30 @@ func TestInvalidBits(t *testing.T) {
 	}
 }
 
+func TestHuffmanDecoderEmptyTreeClearsChunks(t *testing.T) {
+	var h huffmanDecoder
+	if !h.init([]int{1}) {
+		t.Fatal("Failed to initialize non-empty Huffman decoder")
+	}
+	if h.maxRead == 0 {
+		t.Fatal("non-empty Huffman decoder did not set maxRead")
+	}
+	if h.chunks == nil || h.chunks[0] == 0 {
+		t.Fatal("non-empty Huffman decoder did not populate chunks")
+	}
+	if !h.init([]int{0, 0}) {
+		t.Fatal("Failed to initialize empty Huffman decoder")
+	}
+	if h.maxRead != 0 {
+		t.Fatalf("empty Huffman decoder maxRead = %d, want 0", h.maxRead)
+	}
+	for i, chunk := range h.chunks {
+		if chunk != 0 {
+			t.Fatalf("empty Huffman decoder chunk[%d] = %d, want 0", i, chunk)
+		}
+	}
+}
+
 func TestStreams(t *testing.T) {
 	// To verify any of these hexstrings as valid or invalid flate streams
 	// according to the C zlib library, you can use the Python wrapper library:
