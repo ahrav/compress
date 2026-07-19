@@ -26,6 +26,7 @@ import (
 //	$ROFFSET$            the input-offset variable
 //	$FLUSHSTEPINIT$      step assignment for the literal flush pause
 //	$FLUSHSTEPDICT$      step assignment for the copy flush pause
+//	$FINISHBLOCK$        end-of-block: commit state, finishBlock, exit
 //	$RETURN$             exit statement
 //	$TRAILER$            code between the final goto and the closing brace
 const body = `func (f *decompressor) $FUNCNAME$() {
@@ -91,8 +92,7 @@ $FLUSHSTEPINIT$
 			goto readLiteral
 		case v == 256:
 			f.b, f.nb = fb, fnb
-			f.finishBlock()
-			$RETURN$
+$FINISHBLOCK$
 		// otherwise, reference to older data
 		case v < 265:
 			length = v - (257 - 3)
@@ -220,7 +220,18 @@ const slowDoc = `// Decode a single Huffman block from f.
 const fastDoc = "// huffmanBytesReaderFast decodes one Huffman block from `*bytes.Reader` without\n" +
 	"// per-byte `ReadByte` calls. It snapshots the backing slice and byte index,\n" +
 	"// advances a local index while decoding, then writes the index back before\n" +
-	"// return and clears `prevRune` after any byte read.\n"
+	"// return and clears `prevRune` after any byte read.\n" +
+	"//\n" +
+	"// Dispatch contract: `f.step == huffmanBytesReader` implies `f.r` is\n" +
+	"// `*bytes.Reader`; the opening type assertion panics otherwise. The contract\n" +
+	"// holds because every setter of that step token (this function and the\n" +
+	"// generated, unreachable `huffmanBytesReader`) runs only after asserting\n" +
+	"// `f.r.(*bytes.Reader)`.\n" +
+	"//\n" +
+	"// Safety contract: `bytesReaderStateOf` may only run when the init-time\n" +
+	"// layout probe accepted the `bytes.Reader` mirror, so this function first\n" +
+	"// checks `bytesReaderLayoutOK` and delegates to the generated safe decoder\n" +
+	"// when the probe failed.\n"
 
 const slowPreamble = `	fr := f.r.($TYPE$)
 
@@ -229,7 +240,14 @@ const slowPreamble = `	fr := f.r.($TYPE$)
 	// inline call to moreBits and reassign b,nb back to f on return.
 	fnb, fb, dict := f.nb, f.b, &f.dict`
 
-const fastPreamble = `	fr := f.r.(*bytes.Reader)
+const fastPreamble = `	if !bytesReaderLayoutOK {
+		// The runtime layout probe rejected the bytes.Reader mirror
+		// (a Go release changed the unexported layout). Reading through
+		// the mirror would misinterpret memory, so use the safe decoder.
+		f.huffmanBytesReader()
+		return
+	}
+	fr := f.r.(*bytes.Reader)
 	frState := bytesReaderStateOf(fr)
 	frBuf := frState.s
 	frPos := frState.i
@@ -274,6 +292,23 @@ const fastFlushStepDict = "\t\t\t// See the readLiteral flush above: shared resu
 	"\t\t\t// `*bytes.Reader` blocks, routed by doStep.\n" +
 	"\t\t\tf.step = huffmanBytesReader // We need to continue this work"
 
+const slowFinishBlock = `			f.finishBlock()
+			return`
+
+// fastFinishBlock commits the reader index and roffset before calling
+// finishBlock: the end-of-block checkpoint callback derives
+// CompressedOffset/BitOffset from f.roffset and may observe the reader, so
+// the locals must be written back first. It then returns directly instead
+// of jumping to saveReturn, which would redundantly re-commit.
+const fastFinishBlock = "\t\t\tf.roffset = roffset\n" +
+	"\t\t\tfrState.i = frPos\n" +
+	"\t\t\tif frRead {\n" +
+	"\t\t\t\t// See saveReturn: any byte read clears `prevRune`.\n" +
+	"\t\t\t\tfrState.prevRune = -1\n" +
+	"\t\t\t}\n" +
+	"\t\t\tf.finishBlock()\n" +
+	"\t\t\treturn"
+
 const slowTrailer = `	// Not reached
 }`
 
@@ -297,6 +332,7 @@ func render(fast bool, funcName, typ string) string {
 		s = strings.ReplaceAll(s, "$HDSYM$", fastHDSym)
 		s = strings.ReplaceAll(s, "$FLUSHSTEPINIT$", fastFlushStepInit)
 		s = strings.ReplaceAll(s, "$FLUSHSTEPDICT$", fastFlushStepDict)
+		s = strings.ReplaceAll(s, "$FINISHBLOCK$", fastFinishBlock)
 		s = strings.ReplaceAll(s, "$ROFFSET$", "roffset")
 		s = strings.ReplaceAll(s, "$RETURN$", "goto saveReturn")
 		s = strings.ReplaceAll(s, "$TRAILER$", fastTrailer)
@@ -306,6 +342,7 @@ func render(fast bool, funcName, typ string) string {
 		s = strings.ReplaceAll(s, "$HDSYM$", slowHDSym)
 		s = strings.ReplaceAll(s, "$FLUSHSTEPINIT$", slowFlushStepInit)
 		s = strings.ReplaceAll(s, "$FLUSHSTEPDICT$", slowFlushStepDict)
+		s = strings.ReplaceAll(s, "$FINISHBLOCK$", slowFinishBlock)
 		s = strings.ReplaceAll(s, "$ROFFSET$", "f.roffset")
 		s = strings.ReplaceAll(s, "$RETURN$", "return")
 		s = strings.ReplaceAll(s, "$TRAILER$", slowTrailer)
@@ -423,14 +460,31 @@ import (
 `)
 	for i, t := range types {
 		gen.WriteString(slowDoc)
+		if t == "*bytes.Reader" {
+			gen.WriteString("//\n")
+			gen.WriteString("// Unreachable: huffmanBlockDecoder routes `*bytes.Reader` to\n")
+			gen.WriteString("// `huffmanBytesReaderFast` and doStep resumes the shared\n")
+			gen.WriteString("// `huffmanBytesReader` step token there as well. Kept generated so the\n")
+			gen.WriteString("// differential test can compare the fast path against it. If this\n")
+			gen.WriteString("// function is ever re-wired into dispatch, its `f.step =\n")
+			gen.WriteString("// huffmanBytesReader` yields stay compatible: the token still implies\n")
+			gen.WriteString("// `f.r` is `*bytes.Reader`.\n")
+		}
 		gen.WriteString(render(false, "huffman"+names[i], t))
 		gen.WriteString("\n\n")
 	}
+	gen.WriteString("// huffmanBlockDecoder routes `*bytes.Reader` blocks to `huffmanBytesReaderFast`.\n")
+	gen.WriteString("// The generated `huffmanBytesReader` remains unused by this dispatch because\n")
+	gen.WriteString("// the fast path reads the backing slice and commits the reader index on exit.\n")
 	gen.WriteString("func (f *decompressor) huffmanBlockDecoder() {\n")
 	gen.WriteString("\tswitch f.r.(type) {\n")
 	for i, t := range types {
 		gen.WriteString("\tcase " + t + ":\n")
-		gen.WriteString("\t\tf.huffman" + names[i] + "()\n")
+		name := "huffman" + names[i]
+		if t == "*bytes.Reader" {
+			name = "huffmanBytesReaderFast"
+		}
+		gen.WriteString("\t\tf." + name + "()\n")
 	}
 	gen.WriteString("\tdefault:\n")
 	gen.WriteString("\t\tf.huffmanGenericReader()\n")
@@ -439,6 +493,11 @@ import (
 
 	var fastGen strings.Builder
 	fastGen.WriteString(`// Code generated by go generate gen_inflate.go. DO NOT EDIT.
+
+// The unsafe bytes.Reader mirror is unavailable under these tags; the
+// hand-written fallback in huffman_bytes_reader_fast_nounsafe.go delegates to
+// the generated safe decoder instead.
+//go:build !nounsafe && !purego && !appengine
 
 package flate
 

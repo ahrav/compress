@@ -708,7 +708,9 @@ func (f *decompressor) doStep() {
 	case huffmanBytesBuffer:
 		f.huffmanBytesBuffer()
 	case huffmanBytesReader:
-		f.huffmanBytesReader()
+		// `huffmanBytesReader` is the resume token for the hand-written
+		// `*bytes.Reader` fast path.
+		f.huffmanBytesReaderFast()
 	case huffmanBufioReader:
 		f.huffmanBufioReader()
 	case huffmanStringsReader:
