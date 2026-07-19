@@ -4,6 +4,7 @@ package flate
 
 import (
 	"bytes"
+	"io"
 	"reflect"
 	"testing"
 	"unsafe"
@@ -72,5 +73,38 @@ func TestBytesReaderStateOf(t *testing.T) {
 	}
 	if state.prevRune != -1 {
 		t.Fatalf("state.prevRune after ReadByte = %d, want -1", state.prevRune)
+	}
+}
+
+// TestHuffmanBytesReaderFastLayoutFallback forces the layout probe to report
+// a drifted bytes.Reader and verifies the fast path delegates to the
+// generated safe decoder instead of reading through the mirror.
+func TestHuffmanBytesReaderFastLayoutFallback(t *testing.T) {
+	var raw []byte
+	for range 200 {
+		raw = append(raw, "the quick brown fox jumps over the lazy dog "...)
+	}
+	var compressed bytes.Buffer
+	w, err := NewWriter(&compressed, DefaultCompression)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Write(raw); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	saved := bytesReaderLayoutOK
+	bytesReaderLayoutOK = false
+	defer func() { bytesReaderLayoutOK = saved }()
+
+	got, err := io.ReadAll(NewReader(bytes.NewReader(compressed.Bytes())))
+	if err != nil {
+		t.Fatalf("decode with layout fallback: %v", err)
+	}
+	if !bytes.Equal(got, raw) {
+		t.Fatalf("layout fallback output mismatch: %d vs %d bytes", len(got), len(raw))
 	}
 }
